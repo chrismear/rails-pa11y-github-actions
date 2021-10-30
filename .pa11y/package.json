@@ -1,0 +1,11 @@
+{
+  "name": "litmus-pa11y-ci",
+  "private": true,
+  "scripts": {
+    "test:accessibility": "pa11y-ci --config pa11yci.json"
+  },
+  "devDependencies": {
+    "pa11y-ci": "^2.4.2",
+    "wait-port": "0.2.9"
+  }
+}
