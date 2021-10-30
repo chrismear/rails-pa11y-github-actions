@@ -1,0 +1,69 @@
+name: Accessibility tests
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened ]
+    branches:
+      - master
+
+jobs:
+  pa11y:
+    name: Run accessibility tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - uses: mirromutth/mysql-action@v1.1
+        with:
+          mysql version: '8.0'
+          mysql root password: 'root'
+          
+      - name: Install pa11y-ci and tools
+        run: yarn --cwd .pa11y install
+        
+      - name: Wait for MySQL server to be ready
+        run: yarn --cwd .pa11y run wait-port -t 60000 localhost:3306
+
+      - name: Configure Rails app
+        run: |
+          cp config/database.github_actions.yml config/database.yml
+          bundle exec rails db:create db:schema:load
+
+      - name: Start up rails server.
+        run: bundle exec rails server -d
+
+      - uses: actions/setup-node@v2
+        with:
+          node-version: '17.0.1'
+
+      - name: Wait for Rails server to be ready
+        run: yarn --cwd .pa11y run wait-port -t 60000 localhost:3000
+
+      - name: Run pa11y-ci.
+        run: yarn --cwd .pa11y run test:accessibility 2>&1 | tee pa11y_output.txt
+
+      - name: Read pa11y_output file.
+        id: pa11y_output
+        uses: juliangruber/read-file-action@v1
+        with:
+          path: ./pa11y_output.txt
+
+      - name: Check for pa11y failures
+        if: contains(steps.pa11y_output.outputs.content, 'exit code 1')
+        run: |
+          echo "::error:: pa11y run failed. Please review pa11y-ci step in the workflow for details."
+          exit 1
+
+      - name: Comment on pull request.
+        uses: thollander/actions-comment-pull-request@v1
+        with:
+          message: '<details><summary>Pa11y testing results</summary>
+
+
+```${{ steps.pa11y_output.outputs.content }}```
+
+</details>'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
